@@ -7,7 +7,14 @@ authors = [
     { name = "bachaa7", email = "walkyn9@gmail.com" }
 ]
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "jupyter>=1.1.1",
+    "matplotlib>=3.11.2",
+    "numpy>=2.5.4",
+    "pandas>=3.1.0",
+    "scikit-learn>=1.9.1",
+    "seaborn>=0.13.2",
+]
 
 [project.scripts]
 finsight = "finsight:main"
