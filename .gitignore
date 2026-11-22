@@ -14,3 +14,6 @@ wheels/
 data/
 models/
 *.ipynb_checkpoints/
+
+
+docs/classifier-guide.html
