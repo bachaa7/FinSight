@@ -4,6 +4,7 @@ from io import BytesIO
 from unittest.mock import MagicMock, patch
 
 import pytest
+from docx import Document
 from pypdf import PdfWriter
 from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
@@ -72,3 +73,31 @@ def pdf_document_factory():
 
     # Фикстура возвращает функцию: тест сам выбирает страницы и пароль.
     return make_pdf
+
+
+@pytest.fixture
+def docx_document_factory():
+    """Создать DOCX в памяти с абзацами и обычной таблицей между ними."""
+
+    def make_docx(
+        paragraphs: list[str],
+        table_rows: list[list[str]] | None = None,
+        trailing_paragraphs: list[str] | None = None,
+    ) -> bytes:
+        document = Document()
+        for text in paragraphs:
+            document.add_paragraph(text)
+        if table_rows:
+            table = document.add_table(rows=len(table_rows), cols=len(table_rows[0]))
+            for row_index, values in enumerate(table_rows):
+                for column_index, value in enumerate(values):
+                    table.cell(row_index, column_index).text = value
+        for text in trailing_paragraphs or []:
+            document.add_paragraph(text)
+
+        # Возвращаем байты готового документа для files= в TestClient.
+        stream = BytesIO()
+        document.save(stream)
+        return stream.getvalue()
+
+    return make_docx

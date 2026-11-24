@@ -1,4 +1,6 @@
 from importlib import import_module
+from io import BytesIO
+from zipfile import ZipFile
 
 import pytest
 from fastapi.testclient import TestClient
@@ -139,7 +141,7 @@ def test_upload_unsupported_format(api_client, classifier_module):
     )
 
     assert response.status_code == 415
-    assert response.json() == {"detail": "Поддерживаются только TXT и PDF-файлы"}
+    assert response.json() == {"detail": "Поддерживаются только TXT, PDF и DOCX-файлы"}
     classifier_module.classifier.assert_not_called()
 
 
@@ -293,6 +295,132 @@ def test_upload_invalid_pdf(
     response = api_client.post(
         "/documents",
         files={"file": ("invalid.pdf", content, "application/pdf")},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": expected_detail}
+    classifier_module.classifier.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "paragraphs, table_rows, trailing_paragraphs, expected_text, word_count",
+    [
+        (
+            ["The borrower shall repay the loan."],
+            [["Company", "Amount"], ["Acme", "1000"]],
+            ["The lender shall receive interest."],
+            (
+                "The borrower shall repay the loan. Company Amount Acme 1000 "
+                "The lender shall receive interest."
+            ),
+            15,
+        ),
+        (
+            [],
+            [["Company", "Amount"], ["Acme", "1000"]],
+            [],
+            "Company Amount Acme 1000",
+            4,
+        ),
+        (["", "Useful content."], None, [], "Useful content.", 2),
+    ],
+    ids=["paragraph_table_paragraph", "table_only", "blank_first_paragraph"],
+)
+def test_upload_docx(
+    api_client,
+    classifier_module,
+    docx_document_factory,
+    paragraphs,
+    table_rows,
+    trailing_paragraphs,
+    expected_text,
+    word_count,
+):
+    """Абзацы и ячейки DOCX доходят до классификатора в порядке документа."""
+    content = docx_document_factory(paragraphs, table_rows, trailing_paragraphs)
+    model = classifier_module.classifier
+    model.return_value = [
+        [
+            {"label": "News", "score": 0.04},
+            {"label": "Legal", "score": 0.80},
+            {"label": "Financial", "score": 0.07},
+            {"label": "Technical", "score": 0.05},
+            {"label": "General", "score": 0.03},
+            {"label": "Scientific", "score": 0.01},
+        ]
+    ]
+    content_type = (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+
+    response = api_client.post(
+        "/documents",
+        files={"file": ("sample.docx", content, content_type)},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["filename"] == "sample.docx"
+    assert data["content_type"] == content_type
+    assert data["word_count"] == word_count
+    assert data["classification"]["label"] == "Legal"
+    assert data["classification"]["confidence"] == pytest.approx(0.80)
+    # split_text нормализует табуляции и переносы в обычные пробелы.
+    # Проверяем содержание и порядок всего переданного текста.
+    model.assert_called_once_with([expected_text], top_k=None)
+
+
+@pytest.mark.parametrize(
+    "document_kind, expected_detail",
+    [
+        ("empty", "DOCX не содержит извлекаемого текста"),
+        ("whitespace", "DOCX не содержит извлекаемого текста"),
+        ("not_zip", "Не удалось прочитать DOCX-файл"),
+        ("missing_parts", "Не удалось прочитать DOCX-файл"),
+        ("malformed_xml", "Не удалось прочитать DOCX-файл"),
+    ],
+    ids=["empty", "whitespace", "not_zip", "missing_parts", "malformed_xml"],
+)
+def test_upload_invalid_docx(
+    api_client,
+    classifier_module,
+    docx_document_factory,
+    document_kind,
+    expected_detail,
+):
+    """Непригодный DOCX даёт понятный HTTP 422 до обращения к модели."""
+    if document_kind == "empty":
+        content = docx_document_factory([])
+    elif document_kind == "whitespace":
+        content = docx_document_factory(["   \n\t"])
+    elif document_kind == "not_zip":
+        content = b"Not a DOCX archive"
+    elif document_kind == "missing_parts":
+        # Это исправный ZIP, но внутри нет обязательных частей DOCX.
+        stream = BytesIO()
+        with ZipFile(stream, "w") as archive:
+            archive.writestr("example.txt", "Not a Word document")
+        content = stream.getvalue()
+    else:
+        # Оставляем исправный ZIP и остальные части настоящего DOCX,
+        # но повреждаем XML основного текста документа.
+        original = docx_document_factory(["Some text."])
+        stream = BytesIO()
+        with ZipFile(BytesIO(original)) as source, ZipFile(stream, "w") as target:
+            for name in source.namelist():
+                data = b"<broken" if name == "word/document.xml" else source.read(name)
+                target.writestr(name, data)
+        content = stream.getvalue()
+
+    response = api_client.post(
+        "/documents",
+        files={
+            "file": (
+                "invalid.docx",
+                content,
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
     )
 
     assert response.status_code == 422

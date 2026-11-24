@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, UploadFile
 
-from ..documents.extraction import extract_pdf_text, extract_txt_text
+from ..documents.extraction import extract_docx_text, extract_pdf_text, extract_txt_text
 from ..ml.classifier import classifier, classify_document
 from .schemas import ClassifyRequest, ClassifyResponse, DocumentUploadResponse
 
@@ -25,9 +25,9 @@ def classify(request: ClassifyRequest) -> ClassifyResponse:
 @app.post("/documents")
 def upload_document(file: UploadFile) -> DocumentUploadResponse:
     filename = file.filename or ""
-    if not filename.lower().endswith((".txt", ".pdf")):
+    if not filename.lower().endswith((".txt", ".pdf", ".docx")):
         raise HTTPException(
-            status_code=415, detail="Поддерживаются только TXT и PDF-файлы"
+            status_code=415, detail="Поддерживаются только TXT, PDF и DOCX-файлы"
         )
 
     file_bytes = file.file.read(MAX_FILE_SIZE_BYTES + 1)
@@ -39,6 +39,8 @@ def upload_document(file: UploadFile) -> DocumentUploadResponse:
             text = extract_txt_text(file_bytes)
         elif filename.lower().endswith(".pdf"):
             text = extract_pdf_text(file_bytes)
+        elif filename.lower().endswith(".docx"):
+            text = extract_docx_text(file_bytes)
     except UnicodeDecodeError:
         raise HTTPException(
             status_code=422, detail="TXT-файл должен быть в кодировке UTF-8"
