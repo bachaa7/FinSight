@@ -130,16 +130,16 @@ def test_upload_txt(api_client, classifier_module):
 
 
 def test_upload_unsupported_format(api_client, classifier_module):
-    """PDF отклоняется по расширению до обращения к классификатору."""
+    """Изображение отклоняется по расширению до обращения к классификатору."""
     # Содержимое задано байтами: здесь проверяем отклонение расширения,
-    # а не чтение настоящего PDF-документа.
+    # а не чтение настоящего изображения. PDF теперь поддерживается.
     response = api_client.post(
         "/documents",
-        files={"file": ("sample.pdf", b"Some content", "application/pdf")},
+        files={"file": ("sample.png", b"Some content", "image/png")},
     )
 
     assert response.status_code == 415
-    assert response.json() == {"detail": "Поддерживаются только TXT-файлы"}
+    assert response.json() == {"detail": "Поддерживаются только TXT и PDF-файлы"}
     classifier_module.classifier.assert_not_called()
 
 
@@ -224,3 +224,77 @@ def test_upload_exact_size_limit(api_client, classifier_module, monkeypatch):
     assert data["classification"]["label"] == "Legal"
     assert data["classification"]["confidence"] == pytest.approx(0.80)
     model.assert_called_once_with(["One two."], top_k=None)
+
+
+def test_upload_pdf(api_client, classifier_module, pdf_document_factory):
+    """Текст обеих страниц настоящего PDF доходит до классификатора."""
+    content = pdf_document_factory(
+        [
+            "The borrower shall repay the loan.",
+            "The lender shall receive interest.",
+        ]
+    )
+    model = classifier_module.classifier
+    model.return_value = [
+        [
+            {"label": "News", "score": 0.04},
+            {"label": "Legal", "score": 0.80},
+            {"label": "Financial", "score": 0.07},
+            {"label": "Technical", "score": 0.05},
+            {"label": "General", "score": 0.03},
+            {"label": "Scientific", "score": 0.01},
+        ]
+    ]
+
+    response = api_client.post(
+        "/documents",
+        files={"file": ("sample.pdf", content, "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["filename"] == "sample.pdf"
+    assert data["content_type"] == "application/pdf"
+    assert data["word_count"] == 11
+    assert data["classification"]["label"] == "Legal"
+    assert data["classification"]["confidence"] == pytest.approx(0.80)
+    # split_text объединяет пробелы и переносы строк. Ожидаем текст обеих
+    # страниц в исходном порядке, а не только первой страницы.
+    model.assert_called_once_with(
+        ["The borrower shall repay the loan. The lender shall receive interest."],
+        top_k=None,
+    )
+
+
+@pytest.mark.parametrize(
+    "document_kind, expected_detail",
+    [
+        ("empty", "PDF не содержит извлекаемого текста"),
+        ("encrypted", "PDF защищён паролем"),
+        ("broken", "Не удалось прочитать PDF-файл"),
+    ],
+    ids=["empty", "encrypted", "broken"],
+)
+def test_upload_invalid_pdf(
+    api_client,
+    classifier_module,
+    pdf_document_factory,
+    document_kind,
+    expected_detail,
+):
+    """Ошибки извлечения PDF превращаются в HTTP 422 без вызова модели."""
+    if document_kind == "empty":
+        content = pdf_document_factory([""])
+    elif document_kind == "encrypted":
+        content = pdf_document_factory(["Secret text."], password="test-password")
+    else:
+        content = b"%PDF-1.7\nbroken"
+
+    response = api_client.post(
+        "/documents",
+        files={"file": ("invalid.pdf", content, "application/pdf")},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": expected_detail}
+    classifier_module.classifier.assert_not_called()

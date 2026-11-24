@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, UploadFile
 
+from ..documents.extraction import extract_pdf_text, extract_txt_text
 from ..ml.classifier import classifier, classify_document
 from .schemas import ClassifyRequest, ClassifyResponse, DocumentUploadResponse
 
@@ -24,19 +25,26 @@ def classify(request: ClassifyRequest) -> ClassifyResponse:
 @app.post("/documents")
 def upload_document(file: UploadFile) -> DocumentUploadResponse:
     filename = file.filename or ""
-    if not filename.lower().endswith(".txt"):
-        raise HTTPException(status_code=415, detail="Поддерживаются только TXT-файлы")
+    if not filename.lower().endswith((".txt", ".pdf")):
+        raise HTTPException(
+            status_code=415, detail="Поддерживаются только TXT и PDF-файлы"
+        )
 
     file_bytes = file.file.read(MAX_FILE_SIZE_BYTES + 1)
     if len(file_bytes) > MAX_FILE_SIZE_BYTES:
         raise HTTPException(status_code=413, detail="Размер файла превышает 20 МБ")
 
     try:
-        text = file_bytes.decode("utf-8-sig")
+        if filename.lower().endswith(".txt"):
+            text = extract_txt_text(file_bytes)
+        elif filename.lower().endswith(".pdf"):
+            text = extract_pdf_text(file_bytes)
     except UnicodeDecodeError:
         raise HTTPException(
             status_code=422, detail="TXT-файл должен быть в кодировке UTF-8"
         )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error))
 
     try:
         classification = classify_document(text)
