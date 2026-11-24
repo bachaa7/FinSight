@@ -16,3 +16,10 @@ class ClassifyResponse(BaseModel):
     label: str
     confidence: float
     top_3: list[ClassProbability]
+
+
+class DocumentUploadResponse(BaseModel):
+    filename: str
+    content_type: str | None
+    word_count: int
+    classification: ClassifyResponse
