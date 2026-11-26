@@ -1,4 +1,7 @@
-from pydantic import BaseModel, Field
+from datetime import datetime
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ClassifyRequest(BaseModel):
@@ -18,8 +21,15 @@ class ClassifyResponse(BaseModel):
     top_3: list[ClassProbability]
 
 
-class DocumentUploadResponse(BaseModel):
+class DocumentResponse(BaseModel):
     filename: str
     content_type: str | None
     word_count: int
     classification: ClassifyResponse
+    id: UUID
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DocumentDetailResponse(DocumentResponse):
+    text: str

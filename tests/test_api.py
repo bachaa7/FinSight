@@ -3,33 +3,6 @@ from io import BytesIO
 from zipfile import ZipFile
 
 import pytest
-from fastapi.testclient import TestClient
-
-
-@pytest.fixture
-def api_client(classifier_module):
-    """Подготовить клиент настоящего API с тестовой заменой нейросети."""
-    # classifier_module — общая фикстура из conftest.py. К этому моменту
-    # она уже подменила Transformers и загрузила наш модуль классификатора.
-    # Заполняем настройки тестовой модели: их читает эндпоинт /health.
-    classifier_module.classifier.model.config.id2label = {
-        0: "Financial",
-        1: "General",
-        2: "Legal",
-        3: "News",
-        4: "Scientific",
-        5: "Technical",
-    }
-
-    # Импортируем API внутри фикстуры, после подмены модели. При импорте
-    # в начале файла настоящая модель могла бы загрузиться ещё до теста.
-    api_module = import_module("finsight.api.main")
-
-    # TestClient отправляет запросы прямо приложению, без запуска Uvicorn
-    # и без сетевого подключения. yield передаёт клиент тесту; после теста
-    # блок with закрывает клиент, а classifier_module отменяет подмены.
-    with TestClient(api_module.app) as client:
-        yield client
 
 
 def test_health(api_client, classifier_module):
@@ -87,7 +60,7 @@ def test_classify(api_client, classifier_module):
     assert [item["confidence"] for item in data["top_3"]] == pytest.approx(
         [0.80, 0.07, 0.05]
     )
-    model.assert_called_once_with([text], top_k=None)
+    model.assert_called_once_with([text], top_k=None, truncation=False)
 
 
 def test_classify_whitespace(api_client, classifier_module):
@@ -225,7 +198,7 @@ def test_upload_exact_size_limit(api_client, classifier_module, monkeypatch):
     assert data["word_count"] == 2
     assert data["classification"]["label"] == "Legal"
     assert data["classification"]["confidence"] == pytest.approx(0.80)
-    model.assert_called_once_with(["One two."], top_k=None)
+    model.assert_called_once_with(["One two."], top_k=None, truncation=False)
 
 
 def test_upload_pdf(api_client, classifier_module, pdf_document_factory):
@@ -265,6 +238,7 @@ def test_upload_pdf(api_client, classifier_module, pdf_document_factory):
     model.assert_called_once_with(
         ["The borrower shall repay the loan. The lender shall receive interest."],
         top_k=None,
+        truncation=False,
     )
 
 
@@ -367,7 +341,7 @@ def test_upload_docx(
     assert data["classification"]["confidence"] == pytest.approx(0.80)
     # split_text нормализует табуляции и переносы в обычные пробелы.
     # Проверяем содержание и порядок всего переданного текста.
-    model.assert_called_once_with([expected_text], top_k=None)
+    model.assert_called_once_with([expected_text], top_k=None, truncation=False)
 
 
 @pytest.mark.parametrize(

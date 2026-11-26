@@ -1,12 +1,15 @@
 import sys
+from datetime import UTC, datetime
 from importlib import import_module
 from io import BytesIO
 from unittest.mock import MagicMock, patch
 
 import pytest
 from docx import Document
+from fastapi.testclient import TestClient
 from pypdf import PdfWriter
 from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
+from sqlalchemy.orm import Session
 
 
 @pytest.fixture
@@ -27,7 +30,79 @@ def classifier_module():
         with patch.object(ml_package, "classifier", create=True):
             # yield передаёт модуль тесту. После теста блоки with завершатся
             # и вернут исходное состояние импортов.
-            yield import_module("finsight.ml.classifier")
+            module = import_module("finsight.ml.classifier")
+            # Простая тестовая токенизация: одно слово — один токен,
+            # плюс два служебных. В тестах переполнения заменяем её отдельно.
+            module.classifier.tokenizer.side_effect = lambda text, **kwargs: {
+                "input_ids": [0] * (len(text.split()) + 2)
+            }
+            yield module
+
+
+@pytest.fixture
+def api_module(classifier_module):
+    """Импортировать API только после подмены тяжёлой нейросети."""
+    classifier_module.classifier.model.config.id2label = {
+        0: "Financial",
+        1: "General",
+        2: "Legal",
+        3: "News",
+        4: "Scientific",
+        5: "Technical",
+    }
+    classifier_module.classifier.return_value = [
+        [
+            {"label": "Legal", "score": 0.8},
+            {"label": "Financial", "score": 0.07},
+            {"label": "Technical", "score": 0.05},
+            {"label": "News", "score": 0.04},
+            {"label": "General", "score": 0.03},
+            {"label": "Scientific", "score": 0.01},
+        ]
+    ]
+    return import_module("finsight.api.main")
+
+
+@pytest.fixture
+def upload_directory(tmp_path, monkeypatch):
+    """Записывать файлы только во временную папку конкретного теста."""
+    storage = import_module("finsight.documents.storage")
+    directory = tmp_path / "uploads"
+    monkeypatch.setattr(storage, "UPLOAD_DIR", directory)
+    return directory
+
+
+@pytest.fixture
+def api_session():
+    """Заменить PostgreSQL в обычных API-тестах: внешняя БД не нужна."""
+    session = MagicMock(spec=Session)
+    session.get.return_value = None
+    session.scalars.return_value.all.return_value = []
+
+    def refresh(document):
+        # В настоящем PostgreSQL created_at заполняет DEFAULT now().
+        document.created_at = datetime(2026, 1, 1, tzinfo=UTC)
+
+    session.refresh.side_effect = refresh
+    return session
+
+
+@pytest.fixture
+def api_client(api_module, api_session, upload_directory):
+    """Настоящий HTTP-контракт FastAPI, тестовые модель/БД и временные файлы."""
+    previous_overrides = api_module.app.dependency_overrides.copy()
+
+    def override_session():
+        yield api_session
+
+    # Depends(get_session) теперь получает тестовую сессию, не читая .env.
+    api_module.app.dependency_overrides[api_module.get_session] = override_session
+    try:
+        with TestClient(api_module.app) as client:
+            yield client
+    finally:
+        api_module.app.dependency_overrides.clear()
+        api_module.app.dependency_overrides.update(previous_overrides)
 
 
 @pytest.fixture
