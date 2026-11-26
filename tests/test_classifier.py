@@ -44,7 +44,7 @@ def test_single_chunk(classifier_module):
         [0.80, 0.07, 0.05]
     )
     # top_k=None нужен, чтобы получить оценки всех шести классов.
-    model.assert_called_once_with([text], top_k=None)
+    model.assert_called_once_with([text], top_k=None, truncation=False)
 
 
 def test_multiple_chunks(classifier_module):
@@ -94,3 +94,4 @@ def test_multiple_chunks(classifier_module):
     model.assert_called_once()
     assert len(model.call_args.args[0]) == 2
     assert model.call_args.kwargs["top_k"] is None
+    assert model.call_args.kwargs["truncation"] is False
