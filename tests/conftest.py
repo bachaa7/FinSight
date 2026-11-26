@@ -2,6 +2,7 @@ import sys
 from datetime import UTC, datetime
 from importlib import import_module
 from io import BytesIO
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -40,8 +41,21 @@ def classifier_module():
 
 
 @pytest.fixture
-def api_module(classifier_module):
-    """Импортировать API только после подмены тяжёлой нейросети."""
+def entities_module():
+    """Тестировать свою обработку сущностей без загрузки spaCy и весов."""
+    with patch.dict(sys.modules, {"spacy": MagicMock()}):
+        sys.modules.pop("finsight.ml.entities", None)
+        ml_package = import_module("finsight.ml")
+        with patch.object(ml_package, "entities", create=True):
+            module = import_module("finsight.ml.entities")
+            # Нет сущностей — обработанный документ получает [], а не None.
+            module.nlp.return_value = SimpleNamespace(ents=[])
+            yield module
+
+
+@pytest.fixture
+def api_module(classifier_module, entities_module):
+    """Импортировать API только после подмены обеих моделей."""
     classifier_module.classifier.model.config.id2label = {
         0: "Financial",
         1: "General",

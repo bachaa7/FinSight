@@ -11,6 +11,7 @@ from ..database import get_session
 from ..documents.extraction import extract_docx_text, extract_pdf_text, extract_txt_text
 from ..documents.storage import delete_document_file, save_document_file
 from ..ml.classifier import classifier, classify_document
+from ..ml.entities import extract_entities
 from ..models import Document
 from .schemas import (
     ClassifyRequest,
@@ -67,6 +68,7 @@ def upload_document(
 
     try:
         classification = classify_document(text)
+        entities = extract_entities(text)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error))
 
@@ -81,6 +83,7 @@ def upload_document(
         text=text,
         word_count=len(text.split()),
         classification=classification,
+        entities=entities,
     )
 
     try:
@@ -102,6 +105,7 @@ def upload_document(
         "classification": classification,
         "id": document.id,
         "created_at": document.created_at,
+        "entities": document.entities,
     }
 
 

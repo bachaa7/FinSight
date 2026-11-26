@@ -21,6 +21,7 @@ class Document(Base):
     text: Mapped[str] = mapped_column(Text)
     word_count: Mapped[int] = mapped_column()
     classification: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    entities: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
