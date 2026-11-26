@@ -21,6 +21,13 @@ class ClassifyResponse(BaseModel):
     top_3: list[ClassProbability]
 
 
+class EntityResponse(BaseModel):
+    text: str
+    label: str
+    start: int = Field(ge=0)
+    end: int = Field(gt=0)
+
+
 class DocumentResponse(BaseModel):
     filename: str
     content_type: str | None
@@ -29,6 +36,7 @@ class DocumentResponse(BaseModel):
     id: UUID
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
+    entities: list[EntityResponse] | None
 
 
 class DocumentDetailResponse(DocumentResponse):

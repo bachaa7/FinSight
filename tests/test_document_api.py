@@ -50,6 +50,7 @@ def test_upload_connects_file_and_database_record(
     assert document.word_count == data["word_count"] == 6
     assert document.text == "The borrower shall repay the loan."
     assert document.classification == data["classification"]
+    assert document.entities == data["entities"] == []
     assert (
         upload_directory / document.storage_path
     ).read_bytes() == document.text.encode()

@@ -11,6 +11,7 @@ dependencies = [
     "accelerate>=1.15.0",
     "alembic>=1.20.1",
     "datasets>=5.1.0",
+    "en-core-web-sm",
     "fastapi[standard]>=0.162.0",
     "jupyter>=1.1.1",
     "matplotlib>=3.11.2",
@@ -22,6 +23,7 @@ dependencies = [
     "python-docx>=1.2.0",
     "scikit-learn>=1.9.1",
     "seaborn>=0.13.2",
+    "spacy>=3.8.18",
     "sqlalchemy>=2.1.9",
     "torch>=2.11.0",
     "transformers>=5.22.1",
@@ -49,3 +51,4 @@ explicit = true
 
 [tool.uv.sources]
 torch = { index = "pytorch-cu128" }
+en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }
