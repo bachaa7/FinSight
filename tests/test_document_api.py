@@ -51,6 +51,8 @@ def test_upload_connects_file_and_database_record(
     assert document.text == "The borrower shall repay the loan."
     assert document.classification == data["classification"]
     assert document.entities == data["entities"] == []
+    assert document.sentiment == data["sentiment"]
+    assert data["sentiment"]["score"] == pytest.approx(0.6)
     assert (
         upload_directory / document.storage_path
     ).read_bytes() == document.text.encode()

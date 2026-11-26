@@ -15,14 +15,16 @@ def test_exact_token_limit_keeps_original(classifier_module, character_tokenizer
     text = "alpha beta"
     limit = len(text) + 2
 
-    assert classifier_module.split_chunk_by_tokens(text, limit) == [text]
+    assert classifier_module.split_chunk_by_tokens(
+        text, character_tokenizer, limit
+    ) == [text]
 
 
 def test_word_splitting_preserves_order(classifier_module, character_tokenizer):
     text = "alpha beta gamma delta epsilon zeta eta theta"
     limit = 15
 
-    chunks = classifier_module.split_chunk_by_tokens(text, limit)
+    chunks = classifier_module.split_chunk_by_tokens(text, character_tokenizer, limit)
 
     assert len(chunks) > 1
     assert all(chunk for chunk in chunks)
@@ -36,7 +38,7 @@ def test_word_splitting_preserves_order(classifier_module, character_tokenizer):
 def test_text_without_spaces_keeps_every_character(
     classifier_module, character_tokenizer, text
 ):
-    chunks = classifier_module.split_chunk_by_tokens(text)
+    chunks = classifier_module.split_chunk_by_tokens(text, character_tokenizer)
 
     assert len(chunks) > 1
     assert all(chunk for chunk in chunks)
@@ -49,7 +51,7 @@ def test_impossible_limit_stops_instead_of_recursing_forever(
     classifier_module, character_tokenizer, limit
 ):
     with pytest.raises(ValueError, match="Не удалось разделить текст"):
-        classifier_module.split_chunk_by_tokens("abc", limit)
+        classifier_module.split_chunk_by_tokens("abc", character_tokenizer, limit)
 
 
 def test_classifier_averages_all_additional_chunks(

@@ -88,3 +88,25 @@ def split_text(text: str, max_words: int = 120) -> list[str]:
         start = end
 
     return chunks
+
+
+def split_chunk_by_tokens(text: str, tokenizer, max_tokens: int = 512) -> list[str]:
+    encoded = tokenizer(text, truncation=False, verbose=False)
+    token_count = len(encoded["input_ids"])
+    if token_count <= max_tokens:
+        return [text]
+    words = text.split()
+    if len(words) > 1:
+        middle = len(words) // 2
+        left_text = " ".join(words[:middle])
+        right_text = " ".join(words[middle:])
+    else:
+        if len(text) <= 1:
+            raise ValueError("Не удалось разделить текст в пределах лимита токенов")
+        middle = len(text) // 2
+        left_text = text[:middle]
+        right_text = text[middle:]
+
+    left_chunks = split_chunk_by_tokens(left_text, tokenizer, max_tokens)
+    right_chunks = split_chunk_by_tokens(right_text, tokenizer, max_tokens)
+    return left_chunks + right_chunks

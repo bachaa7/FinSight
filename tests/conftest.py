@@ -54,8 +54,30 @@ def entities_module():
 
 
 @pytest.fixture
-def api_module(classifier_module, entities_module):
-    """Импортировать API только после подмены обеих моделей."""
+def sentiment_module():
+    """Подменить FinBERT до импорта модуля: тестам не нужны веса и интернет."""
+    with patch.dict(sys.modules, {"transformers": MagicMock()}):
+        sys.modules.pop("finsight.ml.sentiment", None)
+        ml_package = import_module("finsight.ml")
+        with patch.object(ml_package, "sentiment", create=True):
+            module = import_module("finsight.ml.sentiment")
+            analyzer = module.sentiment_analyzer
+            analyzer.tokenizer.side_effect = lambda text, **kwargs: {
+                "input_ids": [0] * (len(text.split()) + 2)
+            }
+            analyzer.return_value = [
+                [
+                    {"label": "positive", "score": 0.7},
+                    {"label": "negative", "score": 0.1},
+                    {"label": "neutral", "score": 0.2},
+                ]
+            ]
+            yield module
+
+
+@pytest.fixture
+def api_module(classifier_module, entities_module, sentiment_module):
+    """Импортировать API только после подмены всех трёх моделей."""
     classifier_module.classifier.model.config.id2label = {
         0: "Financial",
         1: "General",

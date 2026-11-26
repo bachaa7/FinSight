@@ -12,12 +12,15 @@ from ..documents.extraction import extract_docx_text, extract_pdf_text, extract_
 from ..documents.storage import delete_document_file, save_document_file
 from ..ml.classifier import classifier, classify_document
 from ..ml.entities import extract_entities
+from ..ml.sentiment import analyze_sentiment
 from ..models import Document
 from .schemas import (
     ClassifyRequest,
     ClassifyResponse,
     DocumentDetailResponse,
     DocumentResponse,
+    SentimentRequest,
+    SentimentResponse,
 )
 
 app = FastAPI(title="Finsight API")
@@ -36,6 +39,14 @@ def classify(request: ClassifyRequest) -> ClassifyResponse:
         return classify_document(request.text)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error))
+
+
+@app.post("/sentiment")
+def sentiment(request: SentimentRequest) -> SentimentResponse:
+    try:
+        return analyze_sentiment(request.text)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @app.post("/documents")
@@ -69,6 +80,7 @@ def upload_document(
     try:
         classification = classify_document(text)
         entities = extract_entities(text)
+        sentiment = analyze_sentiment(text)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error))
 
@@ -84,6 +96,7 @@ def upload_document(
         word_count=len(text.split()),
         classification=classification,
         entities=entities,
+        sentiment=sentiment,
     )
 
     try:
@@ -106,6 +119,7 @@ def upload_document(
         "id": document.id,
         "created_at": document.created_at,
         "entities": document.entities,
+        "sentiment": document.sentiment,
     }
 
 
