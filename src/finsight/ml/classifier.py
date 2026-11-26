@@ -2,7 +2,7 @@ from pathlib import Path
 
 from transformers import pipeline
 
-from .chunking import split_text
+from .chunking import split_chunk_by_tokens, split_text
 
 MODEL_DIR = Path(__file__).resolve().parents[3] / "models" / "distilbert_doc_classifier"
 
@@ -13,28 +13,6 @@ classifier = pipeline(
 )
 
 
-def split_chunk_by_tokens(text: str, max_tokens: int = 512) -> list[str]:
-    encoded = classifier.tokenizer(text, truncation=False, verbose=False)
-    token_count = len(encoded["input_ids"])
-    if token_count <= max_tokens:
-        return [text]
-    words = text.split()
-    if len(words) > 1:
-        middle = len(words) // 2
-        left_text = " ".join(words[:middle])
-        right_text = " ".join(words[middle:])
-    else:
-        if len(text) <= 1:
-            raise ValueError("Не удалось разделить текст в пределах лимита токенов")
-        middle = len(text) // 2
-        left_text = text[:middle]
-        right_text = text[middle:]
-
-    left_chunks = split_chunk_by_tokens(left_text, max_tokens)
-    right_chunks = split_chunk_by_tokens(right_text, max_tokens)
-    return left_chunks + right_chunks
-
-
 def classify_document(text: str) -> dict:
     chunks = split_text(text)
 
@@ -43,7 +21,7 @@ def classify_document(text: str) -> dict:
 
     safe_chunks = []
     for chunk in chunks:
-        safe_chunks.extend(split_chunk_by_tokens(chunk))
+        safe_chunks.extend(split_chunk_by_tokens(chunk, classifier.tokenizer))
     chunks = safe_chunks
 
     result = classifier(chunks, top_k=None, truncation=False)
