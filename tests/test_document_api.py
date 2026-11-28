@@ -1,29 +1,8 @@
-from datetime import UTC, datetime
+from datetime import datetime
 from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
-
-from finsight.models import Document
-
-
-@pytest.fixture
-def stored_document():
-    document_id = uuid4()
-    return Document(
-        id=document_id,
-        filename="report.txt",
-        content_type="text/plain",
-        storage_path=f"{document_id}.txt",
-        text="The borrower shall repay the loan.",
-        word_count=6,
-        classification={
-            "label": "Legal",
-            "confidence": 0.8,
-            "top_3": [{"label": "Legal", "confidence": 0.8}],
-        },
-        created_at=datetime(2026, 1, 1, tzinfo=UTC),
-    )
 
 
 def upload_txt(client):
@@ -106,10 +85,16 @@ def test_document_list_serializes_orm_and_hides_internal_fields(
     assert item["id"] == str(stored_document.id)
     assert item["classification"] == stored_document.classification
     assert "text" not in item and "storage_path" not in item
+    assert "statistics" not in item
 
 
 def test_document_detail_reads_saved_text_without_model(
-    api_client, api_session, stored_document, classifier_module
+    api_client,
+    api_session,
+    stored_document,
+    classifier_module,
+    entities_module,
+    sentiment_module,
 ):
     api_session.get.return_value = stored_document
 
@@ -119,7 +104,14 @@ def test_document_detail_reads_saved_text_without_model(
     assert response.json()["text"] == stored_document.text
     assert response.json()["id"] == str(stored_document.id)
     assert "storage_path" not in response.json()
+    assert response.json()["statistics"] == {
+        "char_count": 34,
+        "word_count": 6,
+        "sentence_count": 1,
+    }
     classifier_module.classifier.assert_not_called()
+    entities_module.nlp.assert_not_called()
+    sentiment_module.sentiment_analyzer.assert_not_called()
     api_session.commit.assert_not_called()
 
 
