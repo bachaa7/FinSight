@@ -51,5 +51,12 @@ class DocumentResponse(BaseModel):
     sentiment: SentimentResponse | None
 
 
+class TextStatisticsResponse(BaseModel):
+    char_count: int = Field(ge=0)
+    word_count: int = Field(ge=0)
+    sentence_count: int = Field(ge=0)
+
+
 class DocumentDetailResponse(DocumentResponse):
     text: str
+    statistics: TextStatisticsResponse

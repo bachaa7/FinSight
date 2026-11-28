@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_session
 from ..documents.extraction import extract_docx_text, extract_pdf_text, extract_txt_text
+from ..documents.statistics import get_text_statistics
 from ..documents.storage import delete_document_file, save_document_file
 from ..ml.classifier import classifier, classify_document
 from ..ml.entities import extract_entities
@@ -134,11 +135,14 @@ def get_documents(session: Annotated[Session, Depends(get_session)]) -> list[Doc
 @app.get("/documents/{document_id}", response_model=DocumentDetailResponse)
 def get_document(
     document_id: UUID, session: Annotated[Session, Depends(get_session)]
-) -> Document:
+) -> dict:
     document = session.get(Document, document_id)
     if document is None:
         raise HTTPException(status_code=404, detail="Документ не найден")
-    return document
+    response_data = DocumentResponse.model_validate(document).model_dump()
+    response_data["text"] = document.text
+    response_data["statistics"] = get_text_statistics(document.text)
+    return response_data
 
 
 @app.delete("/documents/{document_id}", status_code=204)

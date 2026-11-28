@@ -4,6 +4,7 @@ from importlib import import_module
 from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+from uuid import uuid4
 
 import pytest
 from docx import Document
@@ -11,6 +12,28 @@ from fastapi.testclient import TestClient
 from pypdf import PdfWriter
 from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 from sqlalchemy.orm import Session
+
+from finsight.models import Document as DocumentRecord
+
+
+@pytest.fixture
+def stored_document():
+    """Общий ORM-объект старого документа для тестов чтения и статистики."""
+    document_id = uuid4()
+    return DocumentRecord(
+        id=document_id,
+        filename="report.txt",
+        content_type="text/plain",
+        storage_path=f"{document_id}.txt",
+        text="The borrower shall repay the loan.",
+        word_count=6,
+        classification={
+            "label": "Legal",
+            "confidence": 0.8,
+            "top_3": [{"label": "Legal", "confidence": 0.8}],
+        },
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
 
 
 @pytest.fixture
@@ -41,7 +64,7 @@ def classifier_module():
 
 
 @pytest.fixture
-def entities_module():
+def entities_module(statistics_module):
     """Тестировать свою обработку сущностей без загрузки spaCy и весов."""
     with patch.dict(sys.modules, {"spacy": MagicMock()}):
         sys.modules.pop("finsight.ml.entities", None)
@@ -76,7 +99,7 @@ def sentiment_module():
 
 
 @pytest.fixture
-def api_module(classifier_module, entities_module, sentiment_module):
+def api_module(statistics_module, classifier_module, entities_module, sentiment_module):
     """Импортировать API только после подмены всех трёх моделей."""
     classifier_module.classifier.model.config.id2label = {
         0: "Financial",
@@ -97,6 +120,16 @@ def api_module(classifier_module, entities_module, sentiment_module):
         ]
     ]
     return import_module("finsight.api.main")
+
+
+@pytest.fixture(scope="session")
+def statistics_module():
+    """Настоящий sentencizer без весов: загрузить до подмены spaCy для NER.
+
+    Иначе spacy.blank() при импорте API получил бы MagicMock из NER-фикстуры,
+    и тесты статистики проверяли бы подмену вместо реального разделения.
+    """
+    return import_module("finsight.documents.statistics")
 
 
 @pytest.fixture

@@ -112,6 +112,11 @@ def test_postgres_upload_read_delete_roundtrip(postgres_client, upload_directory
     assert detail.json()["entities"] == item["entities"] == []
     assert detail.json()["sentiment"] == item["sentiment"]
     assert item["sentiment"]["probabilities"]["positive"] == pytest.approx(0.7)
+    assert detail.json()["statistics"] == {
+        "char_count": 34,
+        "word_count": 6,
+        "sentence_count": 1,
+    }
 
     deleted = postgres_client.delete(f"/documents/{document_id}")
     assert deleted.status_code == 204
@@ -167,6 +172,11 @@ def test_entities_migration_preserves_old_document(postgres_client):
     assert detail.json()["text"] == "Old document."
     assert detail.json()["entities"] is None
     assert detail.json()["sentiment"] is None
+    assert detail.json()["statistics"] == {
+        "char_count": 13,
+        "word_count": 2,
+        "sentence_count": 1,
+    }
 
 
 def test_postgres_entities_jsonb_roundtrip(postgres_client, entities_module):
